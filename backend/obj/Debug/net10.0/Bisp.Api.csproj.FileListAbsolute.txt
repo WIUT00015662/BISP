@@ -140,3 +140,9 @@ C:\Users\rescue.hp\Documents\BISP\app\backend\obj\Debug\net10.0\refint\Bisp.Api.
 C:\Users\rescue.hp\Documents\BISP\app\backend\obj\Debug\net10.0\Bisp.Api.pdb
 C:\Users\rescue.hp\Documents\BISP\app\backend\obj\Debug\net10.0\Bisp.Api.genruntimeconfig.cache
 C:\Users\rescue.hp\Documents\BISP\app\backend\obj\Debug\net10.0\ref\Bisp.Api.dll
+C:\Users\rescue.hp\Documents\BISP\app\backend\obj\Debug\net10.0\Bisp.Api.sourcelink.json
+C:\Users\rescue.hp\Documents\BISP\app\backend\bin\Debug\net10.0\BouncyCastle.Cryptography.dll
+C:\Users\rescue.hp\Documents\BISP\app\backend\bin\Debug\net10.0\MailKit.dll
+C:\Users\rescue.hp\Documents\BISP\app\backend\bin\Debug\net10.0\MimeKit.dll
+C:\Users\rescue.hp\Documents\BISP\app\backend\bin\Debug\net10.0\Newtonsoft.Json.dll
+C:\Users\rescue.hp\Documents\BISP\app\backend\bin\Debug\net10.0\Stripe.net.dll

@@ -6,7 +6,8 @@ public sealed class Game
     public long IgdbId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Genres { get; set; }
-    public string? SummaryUrl { get; set; }
+    public string? Summary { get; set; }
+    public string? CoverImageId { get; set; }
 
     public ICollection<ExternalGameId> ExternalGameIds { get; set; } = new List<ExternalGameId>();
     public ICollection<GameStorePrice> StorePrices { get; set; } = new List<GameStorePrice>();

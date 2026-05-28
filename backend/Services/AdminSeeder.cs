@@ -1,6 +1,8 @@
+using Bisp.Api.Data;
 using Bisp.Api.Models;
 using Bisp.Api.Options;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Bisp.Api.Services;
@@ -8,17 +10,20 @@ namespace Bisp.Api.Services;
 public sealed class AdminSeeder
 {
     private const string AdminRole = "Admin";
+    private readonly AppDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly AdminOptions _options;
     private readonly ILogger<AdminSeeder> _logger;
 
     public AdminSeeder(
+        AppDbContext db,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
         IOptions<AdminOptions> options,
         ILogger<AdminSeeder> logger)
     {
+        _db = db;
         _userManager = userManager;
         _roleManager = roleManager;
         _options = options.Value;
@@ -26,6 +31,32 @@ public sealed class AdminSeeder
     }
 
     public async Task SeedAsync()
+    {
+        await SeedStoresAsync();
+        await SeedAdminAsync();
+    }
+
+    private async Task SeedStoresAsync()
+    {
+        var stores = new[]
+        {
+            new Store { Code = "steam", Name = "Steam" },
+            new Store { Code = "gog", Name = "GOG" },
+            new Store { Code = "epic", Name = "Epic Games Store" }
+        };
+
+        foreach (var store in stores)
+        {
+            if (!await _db.Stores.AnyAsync(s => s.Code == store.Code))
+            {
+                _db.Stores.Add(store);
+            }
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    private async Task SeedAdminAsync()
     {
         if (string.IsNullOrWhiteSpace(_options.Email) || string.IsNullOrWhiteSpace(_options.Password))
         {

@@ -42,5 +42,9 @@ public sealed class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<NotificationLog>()
             .Property(log => log.DiscountPercent)
             .HasPrecision(5, 2);
+
+        builder.Entity<ExternalGameId>()
+            .HasIndex(e => new { e.GameId, e.Provider })
+            .IsUnique();
     }
 }

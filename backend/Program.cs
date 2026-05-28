@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Stripe;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,12 +65,32 @@ builder.Services.AddCors(options =>
             .AllowCredentials());
 });
 
+// Stripe
+var stripeSecretKey = builder.Configuration["Stripe:SecretKey"];
+if (!string.IsNullOrWhiteSpace(stripeSecretKey))
+    StripeConfiguration.ApiKey = stripeSecretKey;
+
+// Named HttpClients for external services
+builder.Services.AddHttpClient<IgdbService>(client =>
+    client.BaseAddress = new Uri("https://api.igdb.com/v4/"));
+builder.Services.AddHttpClient<SteamService>();
+builder.Services.AddHttpClient<GogService>();
+builder.Services.AddHttpClient<EpicService>();
+
+// Strongly typed options for IgdbService constructor (not IOptions<T>)
+var igdbOptions = builder.Configuration.GetSection(IgdbOptions.SectionName).Get<IgdbOptions>() ?? new IgdbOptions();
+builder.Services.AddSingleton(igdbOptions);
+
+// Application services
 builder.Services.AddScoped<PricingService>();
 builder.Services.AddScoped<AggregationService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<EmailSender>();
 builder.Services.AddScoped<AdminSeeder>();
+
+// Background workers
 builder.Services.AddHostedService<AggregationWorker>();
+builder.Services.AddHostedService<NotificationWorker>();
 
 var app = builder.Build();
 
@@ -86,6 +107,9 @@ app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
 {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.EnsureCreatedAsync();
+
     var seeder = scope.ServiceProvider.GetRequiredService<AdminSeeder>();
     await seeder.SeedAsync();
 }
