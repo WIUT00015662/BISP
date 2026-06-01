@@ -26,14 +26,16 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
-        options.SignIn.RequireConfirmedEmail = true;
+        options.SignIn.RequireConfirmedEmail = false;
         options.Password.RequiredLength = 8;
         options.User.RequireUniqueEmail = true;
     })
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
-    .AddDefaultTokenProviders();
+    .AddDefaultTokenProviders()
+    .AddSignInManager();
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey));
@@ -94,12 +96,20 @@ builder.Services.AddHostedService<NotificationWorker>();
 
 var app = builder.Build();
 
+app.UseExceptionHandler(err => err.Run(async ctx =>
+{
+    ctx.Response.StatusCode = 500;
+    ctx.Response.ContentType = "application/json";
+    await ctx.Response.WriteAsJsonAsync(new { error = "Internal server error." });
+}));
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
 app.UseCors("Spa");
 app.UseAuthentication();
 app.UseAuthorization();

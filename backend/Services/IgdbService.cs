@@ -27,17 +27,20 @@ public sealed class IgdbService
     private string? _accessToken;
     private DateTime _tokenExpiresAt = DateTime.MinValue;
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
+    private readonly Func<HttpClient> _tokenClientFactory;
 
     // IGDB external_games categories
     private const int SteamCategory = 1;
     private const int GogCategory = 5;
     private const int EpicCategory = 26;
 
-    public IgdbService(IgdbOptions options, HttpClient http, ILogger<IgdbService> logger)
+    public IgdbService(IgdbOptions options, HttpClient http, ILogger<IgdbService> logger,
+        Func<HttpClient>? tokenClientFactory = null)
     {
         _options = options;
         _http = http;
         _logger = logger;
+        _tokenClientFactory = tokenClientFactory ?? (() => new HttpClient());
     }
 
     public async Task<IReadOnlyList<IgdbGameResult>> GetTopGamesWithStorePresenceAsync(
@@ -56,12 +59,12 @@ public sealed class IgdbService
         int offset = 0;
         const int batchSize = 50;
 
-        while (results.Count < limit && offset < 300)
+        while (results.Count < limit && offset < 500)
         {
             var query = $"""
                 fields id,name,genres.name,cover.image_id,summary,external_games.category,external_games.uid;
                 where external_games.category = ({SteamCategory},{GogCategory},{EpicCategory}) & category = 0 & version_parent = null;
-                sort follows desc;
+                sort total_rating_count desc;
                 limit {batchSize};
                 offset {offset};
                 """;
@@ -177,7 +180,7 @@ public sealed class IgdbService
             if (_accessToken is not null && DateTime.UtcNow < _tokenExpiresAt.AddMinutes(-5))
                 return _accessToken;
 
-            using var tokenClient = new HttpClient();
+            using var tokenClient = _tokenClientFactory();
             var tokenUrl = $"https://id.twitch.tv/oauth2/token" +
                            $"?client_id={_options.ClientId}" +
                            $"&client_secret={_options.ClientSecret}" +
