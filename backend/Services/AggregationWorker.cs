@@ -5,16 +5,16 @@ namespace Bisp.Api.Services;
 
 public sealed class AggregationWorker : BackgroundService
 {
-    private readonly AggregationService _aggregationService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly AggregationOptions _options;
     private readonly ILogger<AggregationWorker> _logger;
 
     public AggregationWorker(
-        AggregationService aggregationService,
+        IServiceScopeFactory scopeFactory,
         IOptions<AggregationOptions> options,
         ILogger<AggregationWorker> logger)
     {
-        _aggregationService = aggregationService;
+        _scopeFactory = scopeFactory;
         _options = options.Value;
         _logger = logger;
     }
@@ -28,7 +28,9 @@ public sealed class AggregationWorker : BackgroundService
         {
             try
             {
-                await _aggregationService.RunAsync(stoppingToken);
+                using var scope = _scopeFactory.CreateScope();
+                var service = scope.ServiceProvider.GetRequiredService<AggregationService>();
+                await service.RunAsync(stoppingToken);
             }
             catch (Exception ex)
             {

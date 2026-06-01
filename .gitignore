@@ -1,0 +1,13 @@
+# --- .NET Build & Output Artifacts ---
+[Bb]in/
+[Oo]bj/
+
+# --- User-Specific IDE Settings ---
+.vs/
+.vscode/
+*.user
+*.suo
+
+# --- OS Specific Garbage ---
+.DS_Store
+Thumbs.db
