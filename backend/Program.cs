@@ -77,7 +77,6 @@ builder.Services.AddHttpClient<IgdbService>(client =>
     client.BaseAddress = new Uri("https://api.igdb.com/v4/"));
 builder.Services.AddHttpClient<SteamService>();
 builder.Services.AddHttpClient<GogService>();
-builder.Services.AddHttpClient<EpicService>();
 
 // Strongly typed options for IgdbService constructor (not IOptions<T>)
 var igdbOptions = builder.Configuration.GetSection(IgdbOptions.SectionName).Get<IgdbOptions>() ?? new IgdbOptions();
@@ -118,7 +117,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    await db.Database.MigrateAsync();
 
     var seeder = scope.ServiceProvider.GetRequiredService<AdminSeeder>();
     await seeder.SeedAsync();

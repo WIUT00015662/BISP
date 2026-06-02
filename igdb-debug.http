@@ -1,0 +1,103 @@
+# IGDB API Debug Requests
+# Requires VS Code REST Client extension.
+#
+# Fill in your credentials below, then:
+#   1. Click "Send Request" on STEP 1 to fetch the token.
+#   2. All other requests pick up the token automatically via {{getToken.response.body.access_token}}.
+
+@client_id     = az2v0kaikq50xi87aqi68qftadgt0c
+@client_secret = 8zq1tspb07ds5dymo0su7x1rup1r6y
+
+# -------------------------------------------------------------------
+# STEP 1 — Get token (run this first, once)
+# @name getToken
+# -------------------------------------------------------------------
+
+# @name getToken
+POST https://id.twitch.tv/oauth2/token?client_id={{client_id}}&client_secret={{client_secret}}&grant_type=client_credentials
+
+###
+
+# -------------------------------------------------------------------
+# STEP 2 — Sanity check: simple search (credentials OK if this works)
+# -------------------------------------------------------------------
+
+POST https://api.igdb.com/v4/games
+Client-ID: {{client_id}}
+Authorization: Bearer {{getToken.response.body.access_token}}
+Content-Type: text/plain
+
+fields id, name;
+search "The Witcher";
+limit 5;
+
+###
+
+# -------------------------------------------------------------------
+# STEP 3 — Our actual app query (what runs on each aggregation batch)
+# Expects 50 results. If this returns [] the where clause is the problem.
+# -------------------------------------------------------------------
+
+POST https://api.igdb.com/v4/games
+Client-ID: {{client_id}}
+Authorization: Bearer {{getToken.response.body.access_token}}
+Content-Type: text/plain
+
+fields id,name,genres.name,cover.image_id,summary,external_games.category,external_games.uid;
+where category = 0 & version_parent = null & external_games != null;
+sort total_rating_count desc;
+limit 50;
+offset 0;
+
+###
+
+# -------------------------------------------------------------------
+# STEP 4 — Inspect external_games for Witcher 3 (id=1942)
+# category 1 = Steam, category 5 = GOG
+# Use a game id from Step 3 to check any game's store entries.
+# -------------------------------------------------------------------
+
+POST https://api.igdb.com/v4/external_games
+Client-ID: {{client_id}}
+Authorization: Bearer {{getToken.response.body.access_token}}
+Content-Type: text/plain
+
+fields game, uid, category;
+where game = 1942 & category = (1, 5);
+
+###
+
+# -------------------------------------------------------------------
+# STEP 5 — Steam price for Witcher 3 (appid 292030)
+# No auth needed. success:false means no store page for this appid.
+# Missing price_overview means free-to-play.
+# -------------------------------------------------------------------
+
+GET https://store.steampowered.com/api/appdetails?appids=292030&cc=us&filters=price_overview
+
+###
+
+# -------------------------------------------------------------------
+# STEP 6 — GOG price for Witcher 3 (product id 1207664663)
+# uid comes from external_games.uid where category = 5.
+# -------------------------------------------------------------------
+
+GET https://api.gog.com/products/1207664663?expand=prices
+
+###
+
+# -------------------------------------------------------------------
+# STEP 7 — Verify Steam+GOG entries exist in IGDB at all
+# Should return rows — if empty, category numbers are wrong.
+# -------------------------------------------------------------------
+
+POST https://api.igdb.com/v4/external_games
+Client-ID: {{client_id}}
+Authorization: Bearer {{getToken.response.body.access_token}}
+Content-Type: text/plain
+
+fields game, uid, category;
+where category = (1, 5);
+limit 20;
+
+###

@@ -12,7 +12,6 @@ public sealed class AggregationService
     private readonly IgdbService _igdb;
     private readonly SteamService _steam;
     private readonly GogService _gog;
-    private readonly EpicService _epic;
     private readonly ILogger<AggregationService> _logger;
 
     public AggregationService(
@@ -20,36 +19,40 @@ public sealed class AggregationService
         IgdbService igdb,
         SteamService steam,
         GogService gog,
-        EpicService epic,
         ILogger<AggregationService> logger)
     {
         _db = db;
         _igdb = igdb;
         _steam = steam;
         _gog = gog;
-        _epic = epic;
         _logger = logger;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    public async Task<int> RunAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Aggregation started at {UtcNow}.", DateTime.UtcNow);
+        _logger.LogInformation("Aggregation run started at {UtcNow}.", DateTime.UtcNow);
 
         var stores = await _db.Stores.ToDictionaryAsync(s => s.Code, cancellationToken);
         if (stores.Count == 0)
         {
-            _logger.LogError("No stores seeded. Aborting aggregation.");
-            return;
+            _logger.LogError("No stores seeded in database. Aborting aggregation.");
+            return 0;
         }
+
+        _logger.LogInformation("Found {Count} store(s) in DB: {Stores}.",
+            stores.Count, string.Join(", ", stores.Keys));
 
         var candidates = await _igdb.GetTopGamesWithStorePresenceAsync(100, cancellationToken);
         if (candidates.Count == 0)
         {
-            _logger.LogWarning("IGDB returned no candidates.");
-            return;
+            _logger.LogWarning("IGDB returned no candidates. Check credentials and query.");
+            return 0;
         }
 
+        _logger.LogInformation("Processing {Count} IGDB candidates.", candidates.Count);
+
         int collected = 0;
+        int skipped = 0;
 
         foreach (var candidate in candidates)
         {
@@ -58,7 +61,6 @@ public sealed class AggregationService
 
             var prices = new List<(Store Store, decimal CurrentPrice, decimal? RegularPrice)>();
 
-            // Steam price (required)
             if (candidate.SteamId is not null && stores.TryGetValue("steam", out var steamStore))
             {
                 var steamPrice = await _steam.GetPriceAsync(candidate.SteamId, cancellationToken);
@@ -66,7 +68,6 @@ public sealed class AggregationService
                     prices.Add((steamStore, steamPrice.Value.CurrentPrice, steamPrice.Value.RegularPrice));
             }
 
-            // GOG price (optional)
             if (candidate.GogId is not null && stores.TryGetValue("gog", out var gogStore))
             {
                 var gogPrice = await _gog.GetPriceAsync(candidate.GogId, cancellationToken);
@@ -74,27 +75,23 @@ public sealed class AggregationService
                     prices.Add((gogStore, gogPrice.Value.CurrentPrice, gogPrice.Value.RegularPrice));
             }
 
-            // Epic price (optional)
-            if (candidate.EpicSlug is not null && stores.TryGetValue("epic", out var epicStore))
-            {
-                var epicPrice = await _epic.GetPriceAsync(candidate.EpicSlug, cancellationToken);
-                if (epicPrice is not null)
-                    prices.Add((epicStore, epicPrice.Value.CurrentPrice, epicPrice.Value.RegularPrice));
-            }
-
-            // Need prices from at least 2 stores
             if (prices.Count < 2)
             {
-                _logger.LogDebug("Skipping {Name} — only {Count} store(s) with prices.", candidate.Name, prices.Count);
+                skipped++;
+                _logger.LogWarning(
+                    "Skipping '{Name}' (IGDB {IgdbId}): only {Count}/2 store(s) returned prices. Steam={SteamId} GOG={GogId}.",
+                    candidate.Name, candidate.IgdbId, prices.Count, candidate.SteamId, candidate.GogId);
                 continue;
             }
 
             await UpsertGameAsync(candidate, prices, cancellationToken);
             collected++;
-            _logger.LogInformation("Collected {Collected}/{Target}: {Name}", collected, TargetGameCount, candidate.Name);
+            _logger.LogInformation("Upserted {Collected}/{Target}: {Name}", collected, TargetGameCount, candidate.Name);
         }
 
-        _logger.LogInformation("Aggregation complete. {Collected} games updated.", collected);
+        _logger.LogInformation("Aggregation complete. Upserted {Upserted} game(s), skipped {Skipped} candidate(s).",
+            collected, skipped);
+        return collected;
     }
 
     private async Task UpsertGameAsync(
@@ -118,12 +115,9 @@ public sealed class AggregationService
         game.Summary = candidate.Summary;
         game.CoverImageId = candidate.CoverImageId;
 
-        // Upsert external IDs
         UpsertExternalId(game, "steam", candidate.SteamId);
         UpsertExternalId(game, "gog", candidate.GogId);
-        UpsertExternalId(game, "epic", candidate.EpicSlug);
 
-        // Upsert store prices
         var now = DateTime.UtcNow;
         foreach (var (store, currentPrice, regularPrice) in prices)
         {

@@ -24,9 +24,20 @@ public sealed class SteamService
             var doc = JsonDocument.Parse(json);
 
             if (!doc.RootElement.TryGetProperty(steamAppId, out var appData)) return null;
-            if (!appData.TryGetProperty("success", out var success) || !success.GetBoolean()) return null;
+
+            if (!appData.TryGetProperty("success", out var success) || !success.GetBoolean())
+            {
+                _logger.LogWarning("Steam appid {AppId} returned success:false — no store page.", steamAppId);
+                return null;
+            }
+
             if (!appData.TryGetProperty("data", out var data)) return null;
-            if (!data.TryGetProperty("price_overview", out var priceOverview)) return null;
+
+            if (!data.TryGetProperty("price_overview", out var priceOverview))
+            {
+                _logger.LogInformation("Steam appid {AppId} has no price_overview (likely free-to-play) — skipping.", steamAppId);
+                return null;
+            }
 
             // Steam returns prices in cents
             var currentCents = priceOverview.GetProperty("final").GetInt32();

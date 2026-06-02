@@ -2,7 +2,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Bisp.Api.Options;
-using Microsoft.Extensions.Options;
 
 namespace Bisp.Api.Services;
 
@@ -15,7 +14,6 @@ public sealed class IgdbGameResult
     public string? Summary { get; init; }
     public string? SteamId { get; init; }
     public string? GogId { get; init; }
-    public string? EpicSlug { get; init; }
 }
 
 public sealed class IgdbService
@@ -29,10 +27,8 @@ public sealed class IgdbService
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
     private readonly Func<HttpClient> _tokenClientFactory;
 
-    // IGDB external_games categories
     private const int SteamCategory = 1;
     private const int GogCategory = 5;
-    private const int EpicCategory = 26;
 
     public IgdbService(IgdbOptions options, HttpClient http, ILogger<IgdbService> logger,
         Func<HttpClient>? tokenClientFactory = null)
@@ -54,16 +50,16 @@ public sealed class IgdbService
             return [];
         }
 
-        // Fetch in batches of 50 (IGDB max), try up to 3 pages to find enough cross-platform games
         var results = new List<IgdbGameResult>();
         int offset = 0;
         const int batchSize = 50;
+        int pages = 0;
 
         while (results.Count < limit && offset < 500)
         {
             var query = $"""
                 fields id,name,genres.name,cover.image_id,summary,external_games.category,external_games.uid;
-                where external_games.category = ({SteamCategory},{GogCategory},{EpicCategory}) & category = 0 & version_parent = null;
+                where category = 0 & version_parent = null & external_games != null;
                 sort total_rating_count desc;
                 limit {batchSize};
                 offset {offset};
@@ -81,13 +77,15 @@ public sealed class IgdbService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "IGDB HTTP request failed.");
+                _logger.LogError(ex, "IGDB HTTP request failed at offset {Offset}.", offset);
                 break;
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("IGDB returned {StatusCode}", response.StatusCode);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("IGDB returned {StatusCode} at offset {Offset}. Body: {Body}",
+                    response.StatusCode, offset, body[..Math.Min(500, body.Length)]);
                 break;
             }
 
@@ -95,6 +93,7 @@ public sealed class IgdbService
             var games = JsonSerializer.Deserialize<JsonElement[]>(json);
             if (games is null || games.Length == 0) break;
 
+            pages++;
             foreach (var game in games)
             {
                 var parsed = ParseGame(game);
@@ -106,16 +105,21 @@ public sealed class IgdbService
             offset += batchSize;
         }
 
-        _logger.LogInformation("IGDB returned {Count} cross-platform candidate games.", results.Count);
+        _logger.LogInformation("IGDB returned {Count} Steam+GOG candidate games from {Pages} page(s).", results.Count, pages);
         return results;
     }
 
-    private static IgdbGameResult? ParseGame(JsonElement game)
+    private IgdbGameResult? ParseGame(JsonElement game)
     {
-        if (!game.TryGetProperty("external_games", out var externalGames))
-            return null;
+        var name = game.TryGetProperty("name", out var n) ? n.GetString() ?? string.Empty : string.Empty;
 
-        string? steamId = null, gogId = null, epicSlug = null;
+        if (!game.TryGetProperty("external_games", out var externalGames))
+        {
+            _logger.LogDebug("Game '{Name}' has no external_games — skipped.", name);
+            return null;
+        }
+
+        string? steamId = null, gogId = null;
 
         foreach (var ext in externalGames.EnumerateArray())
         {
@@ -126,16 +130,17 @@ public sealed class IgdbService
             {
                 case SteamCategory: steamId = uid; break;
                 case GogCategory: gogId = uid; break;
-                case EpicCategory: epicSlug = uid; break;
             }
         }
 
-        // Must have Steam + at least one other store
-        if (steamId is null) return null;
-        if (gogId is null && epicSlug is null) return null;
+        if (steamId is null || gogId is null)
+        {
+            _logger.LogDebug("Game '{Name}' skipped: Steam={SteamId} GOG={GogId}.", name,
+                steamId ?? "missing", gogId ?? "missing");
+            return null;
+        }
 
         var id = game.GetProperty("id").GetInt64();
-        var name = game.TryGetProperty("name", out var n) ? n.GetString() ?? string.Empty : string.Empty;
 
         string? genres = null;
         if (game.TryGetProperty("genres", out var genresEl))
@@ -164,8 +169,7 @@ public sealed class IgdbService
             CoverImageId = coverId,
             Summary = summary,
             SteamId = steamId,
-            GogId = gogId,
-            EpicSlug = epicSlug
+            GogId = gogId
         };
     }
 
@@ -189,7 +193,9 @@ public sealed class IgdbService
             var resp = await tokenClient.PostAsync(tokenUrl, null, cancellationToken);
             if (!resp.IsSuccessStatusCode)
             {
-                _logger.LogError("Failed to get IGDB access token: {StatusCode}", resp.StatusCode);
+                var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Failed to get IGDB access token: {StatusCode}. Body: {Body}",
+                    resp.StatusCode, body);
                 return null;
             }
 

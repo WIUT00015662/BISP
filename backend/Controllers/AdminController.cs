@@ -19,7 +19,7 @@ public sealed class AdminController : ControllerBase
     [HttpPost("aggregate")]
     public async Task<IActionResult> Aggregate(CancellationToken cancellationToken)
     {
-        await _aggregationService.RunAsync(cancellationToken);
-        return Accepted(new { status = "started" });
+        var count = await _aggregationService.RunAsync(cancellationToken);
+        return Ok(new { gamesUpserted = count });
     }
 }

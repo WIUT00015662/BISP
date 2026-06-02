@@ -18,6 +18,7 @@ public sealed class GogService
         CancellationToken cancellationToken = default)
     {
         var url = $"https://api.gog.com/products/{gogProductId}?expand=prices";
+        _logger.LogDebug("Fetching GOG price for product {GogProductId}.", gogProductId);
         try
         {
             var json = await _http.GetStringAsync(url, cancellationToken);
