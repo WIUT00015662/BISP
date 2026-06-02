@@ -31,7 +31,20 @@ export function PriceTable({ prices }) {
             const p = priceMap[store.code]
             return (
               <tr key={store.code} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
-                <td className="p-3 font-medium">{store.name}</td>
+                <td className="p-3 font-medium">
+                  {p?.storeUrl ? (
+                    <a
+                      href={p.storeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 hover:text-primary"
+                    >
+                      {store.name}
+                    </a>
+                  ) : (
+                    store.name
+                  )}
+                </td>
                 {p ? (
                   <>
                     <td className="p-3 text-right text-muted-foreground">

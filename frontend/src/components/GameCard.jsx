@@ -1,6 +1,13 @@
 import { Link } from 'react-router-dom'
+import { ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+
+const STORE_LABELS = {
+  steam: 'Steam',
+  gog: 'GOG',
+  epic: 'Epic Games'
+}
 
 function DiscountBadge({ percent }) {
   if (!percent || percent <= 0) return null
@@ -64,7 +71,26 @@ export function GameCard({ game }) {
             ) : (
               <span className="text-sm text-muted-foreground">Price unavailable</span>
             )}
-            <p className="text-xs text-muted-foreground mt-0.5">{game.storeCount} store{game.storeCount !== 1 ? 's' : ''}</p>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <p className="text-xs text-muted-foreground">
+                {game.storeCount} store{game.storeCount !== 1 ? 's' : ''}
+              </p>
+              {game.bestStoreUrl && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    window.open(game.bestStoreUrl, '_blank', 'noreferrer')
+                  }}
+                  className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+                  aria-label={`Open ${STORE_LABELS[game.bestStoreCode] || 'store'} page`}
+                >
+                  {STORE_LABELS[game.bestStoreCode] || 'Store'}
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

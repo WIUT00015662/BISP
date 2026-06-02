@@ -15,15 +15,48 @@ export default function GameDetailPage() {
   const [subStatus, setSubStatus] = useState(null)
   const [wishlist, setWishlist] = useState([])
   const [adding, setAdding] = useState(false)
+  const [subscriptionChecking, setSubscriptionChecking] = useState(false)
 
   const isLoggedIn = !!getToken()
 
   useEffect(() => {
     api.get(`/api/games/${id}`).then((r) => setGame(r.data)).catch(() => navigate('/')).finally(() => setLoading(false))
 
+    let cancelled = false
+
     if (isLoggedIn) {
-      api.get('/api/subscriptions/status').then((r) => setSubStatus(r.data)).catch(() => {})
+      const pendingKey = 'bisp_subscription_pending'
+
+      async function fetchStatus() {
+        try {
+          const r = await api.get('/api/subscriptions/status')
+          if (!cancelled) setSubStatus(r.data)
+          return r.data
+        } catch {
+          return null
+        }
+      }
+
+      fetchStatus()
+
+      const pendingStamp = Number(localStorage.getItem(pendingKey))
+      if (!Number.isNaN(pendingStamp) && Date.now() - pendingStamp < 5 * 60 * 1000) {
+        setSubscriptionChecking(true)
+        setTimeout(async () => {
+          if (cancelled) return
+          const current = await fetchStatus()
+          if (current?.hasActiveSubscription) {
+            localStorage.removeItem(pendingKey)
+          }
+          if (!cancelled) setSubscriptionChecking(false)
+        }, 3000)
+      }
+
       api.get('/api/wishlist').then((r) => setWishlist(r.data)).catch(() => {})
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [id, isLoggedIn, navigate])
 
@@ -31,6 +64,7 @@ export default function GameDetailPage() {
   const hasSubscription = subStatus?.hasActiveSubscription
 
   async function toggleWishlist() {
+    if (subscriptionChecking) return
     if (!hasSubscription) { navigate('/subscription'); return }
 
     setAdding(true)
@@ -123,10 +157,12 @@ export default function GameDetailPage() {
             <Button
               onClick={toggleWishlist}
               variant={isWishlisted ? 'outline' : 'default'}
-              disabled={adding}
+              disabled={adding || subscriptionChecking}
             >
               {isWishlisted ? (
                 <><HeartOff className="h-4 w-4 mr-2" /> Remove from Wishlist</>
+              ) : subscriptionChecking ? (
+                <><Lock className="h-4 w-4 mr-2" /> Confirming Subscription...</>
               ) : hasSubscription ? (
                 <><Heart className="h-4 w-4 mr-2" /> Add to Wishlist</>
               ) : (

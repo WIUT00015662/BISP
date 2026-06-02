@@ -16,16 +16,55 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true)
   const [checkingOut, setCheckingOut] = useState(false)
   const [message, setMessage] = useState(null)
+  const [isProcessing, setIsProcessing] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('success')) setMessage({ type: 'success', text: 'Subscription activated! Welcome to BISP Premium.' })
-    if (params.get('canceled')) setMessage({ type: 'info', text: 'Checkout canceled. No charges were made.' })
+    const hasSuccess = params.get('success')
+    const hasCanceled = params.get('canceled')
 
-    api.get('/api/subscriptions/status')
-      .then((r) => setStatus(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    if (hasSuccess) {
+      localStorage.setItem('bisp_subscription_pending', Date.now().toString())
+      setIsProcessing(true)
+      setMessage({ type: 'info', text: 'Confirming your subscription. This can take a few seconds.' })
+    }
+
+    if (hasCanceled) {
+      setMessage({ type: 'info', text: 'Checkout canceled. No charges were made.' })
+    }
+
+    let cancelled = false
+
+    async function fetchStatus() {
+      try {
+        const r = await api.get('/api/subscriptions/status')
+        if (!cancelled) setStatus(r.data)
+        return r.data
+      } catch {
+        return null
+      }
+    }
+
+    fetchStatus().finally(() => setLoading(false))
+
+    if (hasSuccess) {
+      setTimeout(async () => {
+        if (cancelled) return
+        const current = await fetchStatus()
+        if (current?.hasActiveSubscription) {
+          localStorage.removeItem('bisp_subscription_pending')
+          setIsProcessing(false)
+          setMessage({ type: 'success', text: 'Subscription activated! Welcome to BISP Premium.' })
+        } else {
+          setIsProcessing(false)
+          setMessage({ type: 'info', text: 'Still confirming your subscription. Click Refresh to check again.', showRefresh: true })
+        }
+      }, 3000)
+    }
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function handleSubscribe() {
@@ -45,12 +84,17 @@ export default function SubscriptionPage() {
       <p className="text-muted-foreground mb-6">Unlock wishlist and price alerts for any game you track.</p>
 
       {message && (
-        <div className={`p-3 rounded-md mb-4 text-sm ${
+        <div className={`p-3 rounded-md mb-4 text-sm flex items-center justify-between gap-3 ${
           message.type === 'success' ? 'bg-green-500/10 text-green-600 dark:text-green-400' :
           message.type === 'error' ? 'bg-destructive/10 text-destructive' :
           'bg-muted text-muted-foreground'
         }`}>
-          {message.text}
+          <span>{message.text}</span>
+          {message.showRefresh && (
+            <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+              Refresh
+            </Button>
+          )}
         </div>
       )}
 
@@ -98,8 +142,13 @@ export default function SubscriptionPage() {
               ))}
             </ul>
 
-            <Button className="w-full" size="lg" onClick={handleSubscribe} disabled={checkingOut}>
-              {checkingOut ? 'Redirecting to Stripe…' : 'Subscribe Now'}
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleSubscribe}
+              disabled={checkingOut || isProcessing}
+            >
+              {checkingOut ? 'Redirecting to Stripe…' : isProcessing ? 'Confirming Subscription...' : 'Subscribe Now'}
             </Button>
 
             <p className="text-center text-xs text-muted-foreground">
