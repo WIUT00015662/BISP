@@ -1,2 +1,4 @@
 <Solution>
+	<Project Path="backend\Bisp.Api.csproj" />
+	<Project Path="Bisp.Api.Tests\Bisp.Api.Tests.csproj" />
 </Solution>

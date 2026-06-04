@@ -18,6 +18,7 @@ public sealed class SteamService
         CancellationToken cancellationToken = default)
     {
         var url = $"https://store.steampowered.com/api/appdetails?appids={steamAppId}&cc=us&filters=price_overview";
+        _logger.LogDebug("Fetching Steam price for app {SteamAppId}.", steamAppId);
         try
         {
             var json = await _http.GetStringAsync(url, cancellationToken);
@@ -35,7 +36,7 @@ public sealed class SteamService
 
             if (!data.TryGetProperty("price_overview", out var priceOverview))
             {
-                _logger.LogInformation("Steam appid {AppId} has no price_overview (likely free-to-play) — skipping.", steamAppId);
+                _logger.LogDebug("Steam appid {AppId} has no price_overview (likely free-to-play).", steamAppId);
                 return null;
             }
 

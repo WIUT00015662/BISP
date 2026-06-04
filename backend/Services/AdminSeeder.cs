@@ -41,7 +41,8 @@ public sealed class AdminSeeder
         var stores = new[]
         {
             new Store { Code = "steam", Name = "Steam" },
-            new Store { Code = "gog", Name = "GOG" }
+            new Store { Code = "gog", Name = "GOG" },
+            new Store { Code = "epic", Name = "Epic Games Store" }
         };
 
         foreach (var store in stores)

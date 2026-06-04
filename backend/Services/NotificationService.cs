@@ -29,6 +29,8 @@ public sealed class NotificationService
             .Include(w => w.Game)
                 .ThenInclude(g => g!.StorePrices)
                     .ThenInclude(p => p.Store)
+            .Include(w => w.Game)
+                .ThenInclude(g => g!.ExternalGameIds)
             .Where(w =>
                 w.LastNotifiedUtc == null || w.LastNotifiedUtc < cutoff)
             .Where(w => _db.UserSubscriptions.Any(s =>
@@ -57,8 +59,13 @@ public sealed class NotificationService
                 continue;
 
             var store = bestDiscount.Price.Store;
+            var storeCode = store?.Code;
+            var externalId = item.Game.ExternalGameIds
+                .FirstOrDefault(e => e.Provider == storeCode)?.ExternalId;
+            var storeUrl = BuildStoreUrl(storeCode, externalId);
+
             var subject = $"🎮 {item.Game.Name} is {bestDiscount.Discount:F0}% off on {store?.Name ?? "a store"}!";
-            var body = BuildEmailBody(item.Game.Name, store?.Name ?? "Store", bestDiscount.Price, bestDiscount.Discount.Value);
+            var body = BuildEmailBody(item.Game.Name, store?.Name ?? "Store", bestDiscount.Price, bestDiscount.Discount.Value, item.MinDiscountPercent, storeUrl);
 
             await _emailSender.SendAsync(item.User.Email!, subject, body, cancellationToken);
 
@@ -83,8 +90,13 @@ public sealed class NotificationService
         }
     }
 
-    private static string BuildEmailBody(string gameName, string storeName, GameStorePrice price, decimal discount)
+    private static string BuildEmailBody(
+        string gameName, string storeName, GameStorePrice price,
+        decimal discount, decimal minDiscountPercent, string? storeUrl)
     {
+        var storeButton = storeUrl is null ? "" :
+            $"""<p><a href="{storeUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">View on {storeName}</a></p>""";
+
         return $"""
             <html><body style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
               <h2 style="color:#2563eb">Price Alert: {gameName}</h2>
@@ -99,8 +111,21 @@ public sealed class NotificationService
                   <td style="padding:8px;border:1px solid #e5e7eb;color:#16a34a;font-weight:bold">${price.CurrentPrice:F2}</td>
                 </tr>
               </table>
-              <p style="color:#6b7280;font-size:0.85em">You set a discount threshold of {price.CurrentPrice:F0}% for this game. Unsubscribe from wishlist notifications by removing this game from your wishlist.</p>
+              {storeButton}
+              <p style="color:#6b7280;font-size:0.85em">You set a discount threshold of {minDiscountPercent:F0}% for this game. Unsubscribe from wishlist notifications by removing this game from your wishlist.</p>
             </body></html>
             """;
+    }
+
+    private static string? BuildStoreUrl(string? storeCode, string? externalId)
+    {
+        if (string.IsNullOrWhiteSpace(storeCode) || string.IsNullOrWhiteSpace(externalId)) return null;
+        return storeCode switch
+        {
+            "steam" => $"https://store.steampowered.com/app/{externalId}",
+            "gog"   => $"https://www.gog.com/en/game/{externalId}",
+            "epic"  => $"https://store.epicgames.com/en-US/p/{externalId}",
+            _       => null
+        };
     }
 }

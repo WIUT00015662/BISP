@@ -70,6 +70,15 @@ public sealed class SubscriptionsController : ControllerBase
             var customerService = new CustomerService();
             var customer = await customerService.CreateAsync(new CustomerCreateOptions { Email = email }, cancellationToken: cancellationToken);
             customerId = customer.Id;
+
+            _db.UserSubscriptions.Add(new UserSubscription
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                StripeCustomerId = customerId,
+                Status = "pending"
+            });
+            await _db.SaveChangesAsync(cancellationToken);
         }
 
         var sessionService = new SessionService();
@@ -87,7 +96,10 @@ public sealed class SubscriptionsController : ControllerBase
             ],
             SuccessUrl = $"{frontendBase}/subscription?success=true",
             CancelUrl = $"{frontendBase}/subscription?canceled=true",
-            Metadata = new Dictionary<string, string> { ["userId"] = userId }
+            SubscriptionData = new SessionSubscriptionDataOptions
+            {
+                Metadata = new Dictionary<string, string> { ["userId"] = userId }
+            }
         }, cancellationToken: cancellationToken);
 
         return Ok(new CheckoutSessionResponse(session.Url));

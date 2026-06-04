@@ -3,6 +3,7 @@ namespace Bisp.Api.Dtos;
 public sealed record StorePriceDto(
     string StoreCode,
     string StoreName,
+    string? StoreUrl,
     decimal CurrentPrice,
     decimal? RegularPrice,
     decimal? DiscountPercent,
@@ -18,6 +19,8 @@ public sealed record GameListItemDto(
     decimal? BestCurrentPrice,
     decimal? BestRegularPrice,
     decimal? BestDiscountPercent,
+    string? BestStoreCode,
+    string? BestStoreUrl,
     int StoreCount);
 
 public sealed record GameDetailDto(

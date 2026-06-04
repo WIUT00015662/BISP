@@ -32,6 +32,7 @@ public sealed class GamesController : ControllerBase
         var query = _db.Games
             .Include(g => g.StorePrices)
                 .ThenInclude(p => p.Store)
+            .Include(g => g.ExternalGameIds)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -58,6 +59,12 @@ public sealed class GamesController : ControllerBase
                 .OrderBy(p => p.CurrentPrice)
                 .FirstOrDefault();
 
+            var bestStoreCode = bestPrice?.Store?.Code;
+            var bestStoreUrl = bestStoreCode is null
+                ? null
+                : BuildStoreUrl(bestStoreCode,
+                    g.ExternalGameIds.FirstOrDefault(e => e.Provider == bestStoreCode)?.ExternalId);
+
             var bestDiscount = g.StorePrices
                 .Select(p => PricingService.CalculateDiscountPercent(p.RegularPrice, p.CurrentPrice))
                 .Where(d => d is not null)
@@ -73,6 +80,8 @@ public sealed class GamesController : ControllerBase
                 bestPrice?.CurrentPrice,
                 bestPrice?.RegularPrice,
                 bestDiscount,
+                bestStoreCode,
+                bestStoreUrl,
                 g.StorePrices.Count);
         }).ToArray();
 
@@ -85,18 +94,30 @@ public sealed class GamesController : ControllerBase
         var game = await _db.Games
             .Include(g => g.StorePrices)
                 .ThenInclude(p => p.Store)
+            .Include(g => g.ExternalGameIds)
             .FirstOrDefaultAsync(g => g.Id == id, cancellationToken);
 
         if (game is null) return NotFound();
 
-        var prices = game.StorePrices.Select(p => new StorePriceDto(
-            p.Store!.Code,
-            p.Store.Name,
-            p.CurrentPrice,
-            p.RegularPrice,
-            PricingService.CalculateDiscountPercent(p.RegularPrice, p.CurrentPrice),
-            p.Currency,
-            p.LastUpdatedUtc)).ToArray();
+        var externalIds = game.ExternalGameIds
+            .GroupBy(e => e.Provider)
+            .ToDictionary(g => g.Key, g => g.First().ExternalId);
+
+        var prices = game.StorePrices.Select(p =>
+        {
+            var storeCode = p.Store!.Code;
+            externalIds.TryGetValue(storeCode, out var externalId);
+
+            return new StorePriceDto(
+                storeCode,
+                p.Store.Name,
+                BuildStoreUrl(storeCode, externalId),
+                p.CurrentPrice,
+                p.RegularPrice,
+                PricingService.CalculateDiscountPercent(p.RegularPrice, p.CurrentPrice),
+                p.Currency,
+                p.LastUpdatedUtc);
+        }).ToArray();
 
         var bestPrice = game.StorePrices.OrderBy(p => p.CurrentPrice).FirstOrDefault();
         var bestDiscount = prices.Select(p => p.DiscountPercent).Where(d => d is not null).OrderByDescending(d => d).FirstOrDefault();
@@ -112,5 +133,18 @@ public sealed class GamesController : ControllerBase
             bestPrice?.RegularPrice,
             bestDiscount,
             prices));
+    }
+
+    private static string? BuildStoreUrl(string storeCode, string? externalId)
+    {
+        if (string.IsNullOrWhiteSpace(externalId)) return null;
+
+        return storeCode switch
+        {
+            "steam" => $"https://store.steampowered.com/app/{externalId}",
+            "gog" => $"https://www.gog.com/en/game/{externalId}",
+            "epic" => $"https://store.epicgames.com/en-US/p/{externalId}",
+            _ => null
+        };
     }
 }

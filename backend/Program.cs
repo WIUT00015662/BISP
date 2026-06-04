@@ -22,6 +22,9 @@ builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOpt
 builder.Services.Configure<AggregationOptions>(builder.Configuration.GetSection(AggregationOptions.SectionName));
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.SectionName));
 
+var aggregationOptions = builder.Configuration.GetSection(AggregationOptions.SectionName)
+    .Get<AggregationOptions>() ?? new AggregationOptions();
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
@@ -77,6 +80,7 @@ builder.Services.AddHttpClient<IgdbService>(client =>
     client.BaseAddress = new Uri("https://api.igdb.com/v4/"));
 builder.Services.AddHttpClient<SteamService>();
 builder.Services.AddHttpClient<GogService>();
+builder.Services.AddHttpClient<EpicService>();
 
 // Strongly typed options for IgdbService constructor (not IOptions<T>)
 var igdbOptions = builder.Configuration.GetSection(IgdbOptions.SectionName).Get<IgdbOptions>() ?? new IgdbOptions();
@@ -90,7 +94,8 @@ builder.Services.AddScoped<EmailSender>();
 builder.Services.AddScoped<AdminSeeder>();
 
 // Background workers
-builder.Services.AddHostedService<AggregationWorker>();
+if (aggregationOptions.Enabled)
+    builder.Services.AddHostedService<AggregationWorker>();
 builder.Services.AddHostedService<NotificationWorker>();
 
 var app = builder.Build();
